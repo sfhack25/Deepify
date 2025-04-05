@@ -28,12 +28,14 @@ from typing import List, Optional
 
 import pdfplumber
 # import google.generativeai as genai
+from dotenv import load_dotenv
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
-from google import genai
+import google.generativeai as genai
+
 
 
 try:
@@ -44,6 +46,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Environment & third‑party setup
 # ---------------------------------------------------------------------------
+load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 
@@ -51,7 +54,11 @@ if not GOOGLE_API_KEY:
     raise RuntimeError("Set GOOGLE_API_KEY environment variable")
 
 # Create a single Gemini client instance (new style)
-GENAI_CLIENT = genai.Client(api_key=GOOGLE_API_KEY)
+# GENAI_CLIENT = genai.Client(api_key=GOOGLE_API_KEY)
+
+genai.configure(api_key=GOOGLE_API_KEY)
+model = genai.GenerativeModel("gemini-pro")
+
 
 mongo_client = AsyncIOMotorClient(MONGODB_URI)
 db = mongo_client["deep_learner"]
@@ -137,7 +144,29 @@ def generate_roadmap(syllabus_text: str):
 # Routes
 # ---------------------------------------------------------------------------
 @app.post("/courses/", response_model=CourseCreateResponse, summary="Create a course and upload syllabus")
-async def create_course(name: str, syllabus: UploadFile = File(...)):
+async def create_course(name: str, syllabus: UploadFile = File(...), test_mode: bool = False):
+
+    if test_mode:
+        # Dummy test mode: Ignore input and return hardcoded data
+        course_doc_test = {
+            "name": "dummy_course",
+            "syllabus_text": "This is a dummy syllabus text for testing.",
+            "created_at": datetime.utcnow(),
+            "roadmap": [
+                {
+                    "date": "2025-04-01",
+                    "topic": "Introduction to Testing",
+                    "preQuizPrompt": "What is testing?",
+                    "assignment": "Read Chapter 1",
+                    "projectDue": None,
+                }
+            ],
+        }
+        result = await db.courses.insert_one(course_doc_test)
+        course_doc_test["_id"] = str(result.inserted_id)
+        return course_doc_test
+
+
     """Accept a PDF or DOCX syllabus, extract text, generate roadmap, persist in MongoDB."""
 
     suffix = os.path.splitext(syllabus.filename)[-1].lower()
@@ -168,6 +197,7 @@ async def create_course(name: str, syllabus: UploadFile = File(...)):
         "created_at": datetime.utcnow(),
         "roadmap": roadmap_json,
     }
+
     result = await db.courses.insert_one(course_doc)
     course_doc["_id"] = str(result.inserted_id)
 

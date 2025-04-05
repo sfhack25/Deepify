@@ -13,9 +13,9 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'  # Requir/ed for flashing messages
+app.secret_key = 'your_secret_key_here'  # Required for flashing messages
 
-load_dotenv()
+load_dotenv()  # Load variables from .env
 
 # Configure upload folder
 UPLOAD_FOLDER = 'uploads'
@@ -89,7 +89,7 @@ def upload_file():
 
 #database functions #
 
-#adding stuff to the database
+#adding stuff to the databa
 @app.route('/add_question', methods=['POST'])
 def add_question():
     try:

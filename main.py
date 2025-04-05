@@ -22,10 +22,11 @@ Dependencies (requirements.txt):
 
 import os
 import json
+from dotenv import load_dotenv
 import tempfile
 from datetime import datetime
 from typing import List, Optional
-
+import re
 import pdfplumber
 # import google.generativeai as genai
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -34,6 +35,8 @@ from pydantic import BaseModel, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from google import genai
+from datetime import date
+load_dotenv()
 
 
 try:
@@ -45,16 +48,21 @@ except ImportError:
 # Environment & third‑party setup
 # ---------------------------------------------------------------------------
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+# Use MongoDB Atlas
+MONGODB_URI = os.getenv("MONGO_URI")
 
 if not GOOGLE_API_KEY:
     raise RuntimeError("Set GOOGLE_API_KEY environment variable")
 
+if not MONGODB_URI:
+    raise RuntimeError("Set MONGO_URI environment variable")
+
 # Create a single Gemini client instance (new style)
 GENAI_CLIENT = genai.Client(api_key=GOOGLE_API_KEY)
 
-mongo_client = AsyncIOMotorClient(MONGODB_URI)
-db = mongo_client["deep_learner"]
+# Initialize MongoDB variables
+mongo_client = None
+db = None
 
 # ---------------------------------------------------------------------------
 # Pydantic models (for request / response bodies)
@@ -64,7 +72,6 @@ class RoadmapEntry(BaseModel):
     topic: str
     preQuizPrompt: Optional[str] = None
     assignment: Optional[str] = None
-    projectDue: Optional[str] = None
 
 
 class CourseCreateResponse(BaseModel):
@@ -83,6 +90,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ---------------------------------------------------------------------------
+# Startup and shutdown events
+# ---------------------------------------------------------------------------
+@app.on_event("startup")
+async def startup_db_client():
+    global mongo_client, db
+    
+    # Connect to MongoDB Atlas
+    try:
+        print(f"Attempting to connect to MongoDB Atlas at: {MONGODB_URI}")
+        # Disable SSL certificate verification for MongoDB Atlas
+        mongo_client = AsyncIOMotorClient(MONGODB_URI, serverSelectionTimeoutMS=5000, tlsAllowInvalidCertificates=True)
+        # Test the connection
+        print("Testing MongoDB connection...")
+        server_info = await mongo_client.server_info()
+        print(f"MongoDB server info: {server_info}")
+        db = mongo_client["deep_learner"]
+        print("Successfully connected to MongoDB Atlas")
+        
+        # Test database access by listing collections
+        collections = await db.list_collection_names()
+        print(f"Available collections: {collections}")
+    except Exception as e:
+        print(f"Failed to connect to MongoDB Atlas: {e}")
+        raise RuntimeError(f"Failed to connect to MongoDB Atlas: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    global mongo_client
+    if mongo_client:
+        mongo_client.close()
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -107,27 +146,50 @@ def extract_text_from_file(path: str, suffix: str) -> str:
 def generate_roadmap(syllabus_text: str):
     """Call Gemini (gemini‑2.0‑flash) to convert raw syllabus into a JSON roadmap."""
 
+    
     prompt = (
         "You are an expert academic planner. Given the following semester syllabus, "
-        "produce a JSON array where each element has: `date` (YYYY-MM-DD or week number), "
-        "`topic`, `preQuizPrompt` (one‑sentence description of what the pre‑lecture quiz should cover), "
-        "`assignment` (optional), `projectDue` (optional). Return ONLY valid JSON.\n\n"
-    )
+        "produce a valid JSON array where each element has: `date` (YYYY-MM-DD), "
+        "has element `topic` and `preQuizPrompt` which is detailed 2 sentence of what the topic is about and `assignment` due on that day if theres any pure json array please with no other info starts with { and ends with }"
+        f"\n\nSyllabus:\n{syllabus_text}"
+        )
 
     try:
+        print(f"Sending prompt to Gemini API: {prompt[:200]}...")
         response = GENAI_CLIENT.models.generate_content(
             model="gemini-2.0-flash",
             contents=prompt,
         )
+        
+        # Log the full response
+        print(f"Gemini API Response: {response}")
+        
+        # Depending on library version, the text may be under `text` or `content`.
+        raw_text = getattr(response, "text", None) or getattr(response, "content", "")
+        print(f"Extracted text from response: {raw_text}")
+        
+        # Clean up the response by removing markdown code block formatting
+        cleaned_text = raw_text
+        if "```json" in cleaned_text:
+            cleaned_text = cleaned_text.split("```json")[1]
+        if "```" in cleaned_text:
+            cleaned_text = cleaned_text.split("```")[0]
+        
+        # Strip any leading/trailing whitespace
+        cleaned_text = cleaned_text.strip()
+        print(f"Cleaned text for JSON parsing: {cleaned_text}")
+        
     except Exception as err:
+        print(f"Error calling Gemini API: {err}")
         raise ValueError(f"Gemini API call failed: {err}")
 
-    # Depending on library version, the text may be under `text` or `content`.
-    raw_text = getattr(response, "text", None) or getattr(response, "content", "")
-
     try:
-        return json.loads(raw_text)
+        roadmap_data = json.loads(cleaned_text)
+        print(f"Successfully parsed JSON roadmap: {roadmap_data}")
+        return roadmap_data
     except Exception as exc:
+        print(f"Error parsing JSON from Gemini response: {exc}")
+        print(f"Raw response that failed to parse: {raw_text}")
         raise ValueError(
             f"Gemini returned invalid JSON: {exc}\nRaw response: {raw_text}"
         )
@@ -164,14 +226,34 @@ async def create_course(name: str, syllabus: UploadFile = File(...)):
     # 3️ Persist to MongoDB
     course_doc = {
         "name": name,
-        "syllabus_text": syllabus_text,
         "created_at": datetime.utcnow(),
         "roadmap": roadmap_json,
     }
-    result = await db.courses.insert_one(course_doc)
-    course_doc["_id"] = str(result.inserted_id)
-
-    return course_doc
+    
+    try:
+        # Insert the document
+        print(f"Inserting course document: {name}")
+        result = await db.courses.insert_one(course_doc)
+        course_id = str(result.inserted_id)
+        print(f"Successfully inserted course with ID: {course_id}")
+        
+        # Verify the document was inserted
+        inserted_doc = await db.courses.find_one({"_id": result.inserted_id})
+        if inserted_doc:
+            print(f"Verified document insertion: {inserted_doc['name']}")
+        else:
+            print("Warning: Could not verify document insertion")
+    except Exception as e:
+        print(f"Error inserting document to MongoDB: {e}")
+        raise RuntimeError(f"Error inserting document to MongoDB: {e}")
+    
+    # Create response with proper _id field
+    response_data = {
+        "_id": course_id,
+        "roadmap": roadmap_json
+    }
+    
+    return response_data
 
 
 @app.get(
@@ -182,21 +264,82 @@ async def create_course(name: str, syllabus: UploadFile = File(...)):
 async def get_roadmap(course_id: str):
     try:
         obj_id = ObjectId(course_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid course ID")
+        course = await db.courses.find_one({"_id": obj_id}, {"_id": 0, "roadmap": 1})
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+        return course["roadmap"]
+    except Exception as e:
+        if "Invalid course ID" in str(e):
+            raise HTTPException(status_code=400, detail="Invalid course ID")
+        raise HTTPException(status_code=500, detail=f"Error retrieving roadmap: {str(e)}")
 
-    course = await db.courses.find_one({"_id": obj_id}, {"_id": 0, "roadmap": 1})
-    if not course:
-        raise HTTPException(status_code=404, detail="Course not found")
-
-    return course["roadmap"]
 
 
-# ---------------------------------------------------------------------------
-# TODOs for next iterations
-# ---------------------------------------------------------------------------
-# • Endpoint to generate pre‑lecture quizzes from roadmap entries.
-# • Handwriting OCR endpoint (Cloud Vision) → post‑lecture quiz generation.
-# • Spaced‑repetition scheduler (Celery/cron) + Calendar push.
-# • Authentication & user‑specific quiz attempts (collections: users, quizzes, attempts).
-# • Front‑end integration (React / React Native).
+@app.post("/courses/{course_id}/quizzes/pre", summary="Generate pre-lecture quiz for all roadmap topics")
+async def generate_pre_quiz(course_id: str):
+    try:
+        obj_id = ObjectId(course_id)
+        course = await db.courses.find_one({"_id": obj_id})
+        if not course:
+            raise HTTPException(status_code=404, detail="Course not found")
+
+        roadmap = course.get("roadmap", [])
+        if not roadmap:
+            raise HTTPException(status_code=404, detail="No roadmap entries found")
+
+        all_quizzes = []
+
+        for entry in roadmap:
+            topic = entry.get("topic")
+            prompt = entry.get("preQuizPrompt")
+
+            if not topic or not prompt:
+                continue  # skip entries without quiz input data
+
+            quiz_prompt = f"""
+Create 10 multiple-choice questions (A–D) with answers to help a student prepare for a lecture on:
+
+Topic: {topic}
+Prompt: {prompt}
+
+Return ONLY valid JSON in this format:
+[
+  {{
+    "question": "...",
+    "choices": ["A...", "B...", "C...", "D..."],
+    "answer": "B"
+  }},
+  ...
+]
+"""
+
+            try:
+                response = GENAI_CLIENT.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=quiz_prompt,
+                )
+                raw_text = getattr(response, "text", None) or getattr(response, "content", "")
+                stripped = raw_text.strip()
+
+                if stripped.startswith("```"):
+                    stripped = re.sub(r"^```[a-zA-Z]*\n", "", stripped)
+                    stripped = re.sub(r"```$", "", stripped)
+                    stripped = stripped.strip()
+
+                quiz_data = json.loads(stripped)
+
+                all_quizzes.append({
+                    "topic": topic,
+                    "quiz": quiz_data
+                })
+
+            except Exception as e:
+                all_quizzes.append({
+                    "topic": topic,
+                    "error": f"Quiz generation failed: {e}"
+                })
+
+        return {"quizzes": all_quizzes}
+
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Internal error: {err}")

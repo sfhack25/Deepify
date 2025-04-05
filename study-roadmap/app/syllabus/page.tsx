@@ -25,46 +25,41 @@ export default function SyllabusInput() {
     }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsUploading(true)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsUploading(true);
 
-    // In a real app, we would process the syllabus here and create a new subject
-
-    // Generate a unique ID for the new subject
-    const newId = Date.now()
-
-    // Create the new subject object
-    const newSubject = {
-      id: newId,
-      title: title,
-      description: "Newly created subject from syllabus upload",
-      lastAccessed: "Just now",
-      progress: 0,
+    if (!file) {
+      console.error("No file selected");
+      setIsUploading(false);
+      return;
     }
 
-    // In a real app, this would be a database call
     try {
-      // Get existing subjects from localStorage or use an empty array
-      const existingSubjectsJSON = localStorage.getItem("subjects")
-      const existingSubjects = existingSubjectsJSON ? JSON.parse(existingSubjectsJSON) : []
+      const formData = new FormData();
+      formData.append("syllabus", file); // Add the file to FormData
 
-      // Add the new subject
-      const updatedSubjects = [...existingSubjects, newSubject]
+      // Send `name` as a query parameter
+      const response = await fetch(`http://127.0.0.1:8000/courses/?name=${encodeURIComponent(title)}`, {
+        method: "POST",
+        body: formData,
+      });
 
-      // Save back to localStorage
-      localStorage.setItem("subjects", JSON.stringify(updatedSubjects))
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to upload: ${response.statusText}`, errorText);
+        throw new Error(`Failed to upload: ${response.statusText}`);
+      }
 
-      // Simulate a short delay for the upload process
-      setTimeout(() => {
-        // Redirect to the new subject's dashboard instead of roadmap
-        router.push(`/dashboard/${newId}`)
-      }, 1000)
+      const result = await response.json();
+      console.log("Upload successful:", result);
+
+      router.push(`/dashboard/${result._id}`);
     } catch (error) {
-      console.error("Error saving subject:", error)
-      setIsUploading(false)
+      console.error("Error uploading file:", error);
+      setIsUploading(false);
     }
-  }
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">

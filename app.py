@@ -13,9 +13,9 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key_here'  # Required for flashing messages
+app.secret_key = 'your_secret_key_here'  # Requir/ed for flashing messages
 
-load_dotenv()  # Load variables from .env
+load_dotenv()
 
 # Configure upload folder
 UPLOAD_FOLDER = 'uploads'

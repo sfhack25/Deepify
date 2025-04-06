@@ -1,15 +1,25 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, CheckCircle, X, FileText, RotateCcw } from "lucide-react"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import {
+  ArrowLeft,
+  CheckCircle,
+  X,
+  FileText,
+  RotateCcw,
+  Loader2,
+} from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { api, NotesQuiz } from "@/lib/api";
+import { toast } from "sonner";
+import { NotesImageViewer } from "@/components/notes-image-viewer";
 
-// Sample notes quiz data
-const notesQuizzes = {
+// Sample notes quiz data as fallback
+const sampleNotesQuizzes = {
   n1: {
     title: "Algorithm Complexity",
     description: "Test your knowledge of Big O notation from your notes",
@@ -23,7 +33,8 @@ const notesQuizzes = {
       },
       {
         id: 2,
-        question: "Which sorting algorithm has the worst case time complexity of O(n²)?",
+        question:
+          "Which sorting algorithm has the worst case time complexity of O(n²)?",
         options: ["Merge Sort", "Quick Sort", "Bubble Sort", "Heap Sort"],
         correctAnswer: "Bubble Sort",
       },
@@ -48,7 +59,12 @@ const notesQuizzes = {
       {
         id: 1,
         question: "Which sorting algorithm uses a divide-and-conquer approach?",
-        options: ["Bubble Sort", "Insertion Sort", "Merge Sort", "Selection Sort"],
+        options: [
+          "Bubble Sort",
+          "Insertion Sort",
+          "Merge Sort",
+          "Selection Sort",
+        ],
         correctAnswer: "Merge Sort",
       },
       {
@@ -73,8 +89,14 @@ const notesQuizzes = {
       },
       {
         id: 2,
-        question: "What is the primary advantage of a linked list over an array?",
-        options: ["Dynamic size allocation", "Faster access time", "Less memory usage", "Simpler implementation"],
+        question:
+          "What is the primary advantage of a linked list over an array?",
+        options: [
+          "Dynamic size allocation",
+          "Faster access time",
+          "Less memory usage",
+          "Simpler implementation",
+        ],
         correctAnswer: "Dynamic size allocation",
       },
     ],
@@ -97,104 +119,200 @@ const notesQuizzes = {
       },
       {
         id: 2,
-        question: "Which OOP principle allows a class to inherit properties from another class?",
-        options: ["Encapsulation", "Inheritance", "Polymorphism", "Abstraction"],
+        question:
+          "Which OOP principle allows a class to inherit properties from another class?",
+        options: [
+          "Encapsulation",
+          "Inheritance",
+          "Polymorphism",
+          "Abstraction",
+        ],
         correctAnswer: "Inheritance",
       },
     ],
   },
-}
+};
 
-export default function NotesQuizPage({ params }: { params: { id: string; quizId: string } }) {
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [isCardFlipped, setIsCardFlipped] = useState(false)
-  const [correctAnswers, setCorrectAnswers] = useState(0)
-  const [difficultyFeedback, setDifficultyFeedback] = useState<Record<number, string>>({})
-  const [isQuizCompleted, setIsQuizCompleted] = useState(false)
+export default function NotesQuizPage({
+  params,
+}: {
+  params: { id: string; quizId: string };
+}) {
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [isCardFlipped, setIsCardFlipped] = useState(false);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [difficultyFeedback, setDifficultyFeedback] = useState<
+    Record<number, string>
+  >({});
+  const [isQuizCompleted, setIsQuizCompleted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [quizData, setQuizData] = useState<NotesQuiz | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
 
-  const topicId = params.id
-  const quizId = params.quizId
-  const quiz = notesQuizzes[quizId as keyof typeof notesQuizzes]
+  const courseId = params.id;
+  const quizId = params.quizId;
+
+  // Extract the topic number from quizId (format is 'nX' where X is the topic number)
+  const topicNumber = parseInt(quizId.replace("n", ""), 10);
+
+  // Fetch quiz data from the API
+  useEffect(() => {
+    const fetchQuizData = async () => {
+      try {
+        setIsLoading(true);
+
+        // Fetch quiz data for this topic
+        const notesQuiz = await api.getNotesQuiz(courseId, topicNumber);
+
+        if (notesQuiz) {
+          setQuizData(notesQuiz);
+
+          // If there's an image associated with the quiz, set the image URL
+          if (notesQuiz.image_id) {
+            setImageUrl(api.getImageUrl(notesQuiz.image_id));
+          }
+        } else {
+          // Fallback to sample quiz data if API doesn't return anything
+          const fallbackQuiz =
+            sampleNotesQuizzes[quizId as keyof typeof sampleNotesQuizzes];
+          if (fallbackQuiz) {
+            // Convert to the same format as API data
+            setQuizData({
+              _id: quizId,
+              course_id: courseId,
+              topic_number: topicNumber,
+              title: fallbackQuiz.title,
+              description: fallbackQuiz.description,
+              source: fallbackQuiz.source,
+              questions: fallbackQuiz.questions,
+              created_at: new Date().toISOString(),
+            });
+          } else {
+            setError("Quiz not found");
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching quiz:", err);
+        setError(err instanceof Error ? err.message : "Failed to load quiz");
+        toast.error("Failed to load quiz data");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchQuizData();
+  }, [courseId, quizId, topicNumber]);
 
   // Check if we've reached the end of the quiz
   useEffect(() => {
-    if (quiz && currentQuestionIndex >= quiz.questions.length) {
-      setIsQuizCompleted(true)
+    if (quizData && currentQuestionIndex >= quizData.questions.length) {
+      setIsQuizCompleted(true);
     }
-  }, [currentQuestionIndex, quiz])
+  }, [currentQuestionIndex, quizData]);
 
-  if (!quiz) {
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8 flex flex-col items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-muted-foreground">Loading quiz data...</p>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !quizData) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold">Quiz not found</h1>
-        <Link href={`/dashboard/${topicId}`}>
+        <h1 className="text-2xl font-bold text-destructive">Quiz not found</h1>
+        <p className="text-muted-foreground mt-2 mb-4">
+          {error || "The requested quiz could not be found"}
+        </p>
+        <Link href={`/dashboard/${courseId}`}>
           <Button className="mt-4">Back to Dashboard</Button>
         </Link>
       </div>
-    )
+    );
   }
 
   const currentQuestion =
-    quiz && currentQuestionIndex < quiz.questions.length ? quiz.questions[currentQuestionIndex] : null
-  const progress = ((currentQuestionIndex + 1) / quiz.questions.length) * 100
+    quizData && currentQuestionIndex < quizData.questions.length
+      ? quizData.questions[currentQuestionIndex]
+      : null;
+  const progress =
+    quizData.questions.length > 0
+      ? ((currentQuestionIndex + 1) / quizData.questions.length) * 100
+      : 0;
 
   // Toggle card flip
   const toggleCardFlip = () => {
-    setIsCardFlipped(!isCardFlipped)
-  }
+    setIsCardFlipped(!isCardFlipped);
+  };
 
   // Handle difficulty rating selection
   const handleDifficultyFeedback = (difficulty: string) => {
+    if (!currentQuestion) return;
+
     // Record the difficulty feedback
     setDifficultyFeedback((prev) => ({
       ...prev,
       [currentQuestion.id]: difficulty,
-    }))
+    }));
 
     // If the user got the answer right (based on their self-assessment), increment the counter
     if (difficulty === "easy" || difficulty === "medium") {
-      setCorrectAnswers((prev) => prev + 1)
+      setCorrectAnswers((prev) => prev + 1);
     }
 
     // Move to the next question
-    setCurrentQuestionIndex((prev) => prev + 1)
+    setCurrentQuestionIndex((prev) => prev + 1);
     // Reset card to front side for the next question
-    setIsCardFlipped(false)
-  }
+    setIsCardFlipped(false);
+  };
 
   const handleRetryQuiz = () => {
-    setCurrentQuestionIndex(0)
-    setIsCardFlipped(false)
-    setCorrectAnswers(0)
-    setDifficultyFeedback({})
-    setIsQuizCompleted(false)
-  }
+    setCurrentQuestionIndex(0);
+    setIsCardFlipped(false);
+    setCorrectAnswers(0);
+    setDifficultyFeedback({});
+    setIsQuizCompleted(false);
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center">
-          <Link href={`/dashboard/${topicId}`}>
+          <Link href={`/dashboard/${courseId}`}>
             <Button variant="ghost" size="sm" className="mr-2">
               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
             </Button>
           </Link>
-          <h2 className="text-2xl font-bold text-foreground">{quiz.title}</h2>
+          <h2 className="text-2xl font-bold text-foreground">
+            {quizData.title}
+          </h2>
         </div>
         <ThemeToggle />
       </div>
 
       <div className="mb-6">
-        <p className="text-muted-foreground">{quiz.description}</p>
+        <p className="text-muted-foreground">{quizData.description}</p>
         <div className="mt-2 flex items-center text-sm text-primary">
-          <FileText className="mr-1 h-4 w-4" /> Source: {quiz.source}
+          <FileText className="mr-1 h-4 w-4" /> Source: {quizData.source}
         </div>
       </div>
+
+      {/* Display the image if available */}
+      {imageUrl && (
+        <div className="mb-6">
+          <NotesImageViewer imageUrl={imageUrl} altText="Image from notes" />
+        </div>
+      )}
 
       <div className="mb-4">
         <div className="flex justify-between text-sm">
           <span>
-            Question {currentQuestionIndex + 1} of {quiz.questions.length}
+            Question {currentQuestionIndex + 1} of {quizData.questions.length}
           </span>
           <span>{correctAnswers} correct</span>
         </div>
@@ -220,27 +338,43 @@ export default function NotesQuizPage({ params }: { params: { id: string; quizId
               onClick={toggleCardFlip}
             >
               <div className="flex-1 flex items-center justify-center">
-                <h2 className="text-xl font-medium text-center">{currentQuestion.question}</h2>
+                <h2 className="text-xl font-medium text-center">
+                  {currentQuestion.question}
+                </h2>
               </div>
-              <div className="text-center text-sm text-muted-foreground mt-4">Click card to see answer</div>
+              <div className="text-center text-sm text-muted-foreground mt-4">
+                Click card to see answer
+              </div>
             </Card>
 
             {/* Back of card (Answer) */}
             <Card
               className="absolute inset-0 p-6 flex flex-col justify-between backface-hidden rotate-y-180"
-              style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+              style={{
+                backfaceVisibility: "hidden",
+                transform: "rotateY(180deg)",
+              }}
             >
               <div className="flex-1 flex flex-col items-center justify-center">
                 <h3 className="text-lg font-medium mb-4">Answer:</h3>
-                <p className="text-xl font-bold text-primary">{currentQuestion.correctAnswer}</p>
+                <p className="text-xl font-bold text-primary">
+                  {currentQuestion.correctAnswer}
+                </p>
 
-                <Button variant="ghost" size="sm" className="mt-4 flex items-center gap-1" onClick={toggleCardFlip}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-4 flex items-center gap-1"
+                  onClick={toggleCardFlip}
+                >
                   <RotateCcw className="h-4 w-4 mr-1" /> Flip back to question
                 </Button>
               </div>
 
               <div className="mt-6 border-t border-border pt-4">
-                <h3 className="mb-4 text-sm font-medium text-center">Rate your knowledge:</h3>
+                <h3 className="mb-4 text-sm font-medium text-center">
+                  Rate your knowledge:
+                </h3>
                 <div className="flex justify-center space-x-6">
                   <button
                     className="flex flex-col items-center gap-2 transition-transform hover:scale-110"
@@ -295,17 +429,17 @@ export default function NotesQuizPage({ params }: { params: { id: string; quizId
           </div>
           <h2 className="mb-2 text-2xl font-bold">Quiz Completed!</h2>
           <p className="mb-6 text-muted-foreground">
-            You got {correctAnswers} out of {quiz?.questions?.length || 0} questions correct.
+            You got {correctAnswers} out of {quizData?.questions?.length || 0}{" "}
+            questions correct.
           </p>
           <div className="flex justify-center space-x-4">
             <Button onClick={handleRetryQuiz}>Retry Quiz</Button>
-            <Link href={`/dashboard/${topicId}`}>
+            <Link href={`/dashboard/${courseId}`}>
               <Button variant="outline">Back to Dashboard</Button>
             </Link>
           </div>
         </Card>
       )}
     </div>
-  )
+  );
 }
-

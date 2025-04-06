@@ -1,121 +1,249 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, CheckCircle, X } from "lucide-react"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import {
+  ArrowLeft,
+  CheckCircle,
+  BookOpen,
+  Clock,
+  CheckSquare,
+} from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { toast } from "sonner";
+import { api } from "@/lib/api";
+import { CircularTimer } from "@/components/circular-timer";
+import { Calendar } from "@/components/calendar";
 
-// Sample quiz data - in a real app, this would be generated from the syllabus
-const topics = {
-  "1": {
-    title: "Introduction to Computer Science",
-    description: "Test your knowledge of computer science fundamentals",
-    questions: [
-      {
-        id: 1,
-        question: "What does CPU stand for?",
-        options: [
-          "Central Processing Unit",
-          "Computer Personal Unit",
-          "Central Processor Utility",
-          "Central Program Unit",
-        ],
-        correctAnswer: "Central Processing Unit",
-      },
-      {
-        id: 2,
-        question: "Which of the following is NOT a programming paradigm?",
-        options: [
-          "Object-Oriented Programming",
-          "Functional Programming",
-          "Procedural Programming",
-          "Analytical Programming",
-        ],
-        correctAnswer: "Analytical Programming",
-      },
-      {
-        id: 3,
-        question: "What is the binary representation of the decimal number 10?",
-        options: ["1010", "1000", "1100", "1001"],
-        correctAnswer: "1010",
-      },
-    ],
-  },
-  "2": {
-    title: "Data Structures",
-    description: "Test your knowledge of data structures",
-    questions: [
-      {
-        id: 1,
-        question: "Which data structure operates on a LIFO principle?",
-        options: ["Queue", "Stack", "Linked List", "Array"],
-        correctAnswer: "Stack",
-      },
-      {
-        id: 2,
-        question: "What is the time complexity of searching in a balanced binary search tree?",
-        options: ["O(1)", "O(n)", "O(log n)", "O(n²)"],
-        correctAnswer: "O(log n)",
-      },
-    ],
-  },
-}
+export default function TopicPage() {
+  const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const topicNumber = searchParams.get("topicNumber");
+  const fromRoadmap = searchParams.get("from") === "roadmap";
 
-export default function TopicQuiz({ params }: { params: { id: string } }) {
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null)
-  const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false)
-  const [correctAnswers, setCorrectAnswers] = useState(0)
+  const courseId = params.id as string;
+  const [userId] = useState("user-1"); // In a real app, this would come from authentication
+  const [topic, setTopic] = useState<{
+    title: string;
+    content: string;
+    progress: number;
+    completed: boolean;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [timeSpent, setTimeSpent] = useState(0);
+  const [progressUpdated, setProgressUpdated] = useState(false);
 
-  const topic = topics[params.id as keyof typeof topics]
+  // Load topic data
+  useEffect(() => {
+    const loadTopic = () => {
+      try {
+        // Check if we have roadmap data in localStorage
+        const roadmapItemsJSON = localStorage.getItem(
+          `roadmapItems_${courseId}`
+        );
+        if (roadmapItemsJSON && topicNumber) {
+          const roadmapItems = JSON.parse(roadmapItemsJSON);
+          const topicIndex = parseInt(topicNumber) - 1;
+
+          if (roadmapItems[topicIndex]) {
+            // Get progress data
+            const progressDataJSON = localStorage.getItem(
+              `progress_${courseId}`
+            );
+            let progressData = progressDataJSON
+              ? JSON.parse(progressDataJSON)
+              : { topics: [] };
+
+            if (!progressData.topics) {
+              progressData.topics = [];
+            }
+
+            // Get or initialize topic progress
+            let topicProgress = progressData.topics[topicIndex] || {
+              progress: 0,
+              completed: false,
+            };
+
+            // Create topic object
+            setTopic({
+              title: roadmapItems[topicIndex].title,
+              content:
+                roadmapItems[topicIndex].content ||
+                "This topic content is being generated...",
+              progress: topicProgress.progress || 0,
+              completed: topicProgress.completed || false,
+            });
+          }
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error("Error loading topic:", error);
+        setLoading(false);
+      }
+    };
+
+    loadTopic();
+  }, [courseId, topicNumber]);
+
+  // Track time spent on page for progress
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeSpent((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Update progress based on time spent (after 30 seconds, mark as in progress)
+  useEffect(() => {
+    if (topic && !topic.completed && timeSpent >= 30 && !progressUpdated) {
+      updateTopicProgress(75); // 75% after spending time reading
+      setProgressUpdated(true);
+    }
+  }, [timeSpent, topic, progressUpdated]);
+
+  const updateTopicProgress = (newProgress: number, markCompleted = false) => {
+    if (!topicNumber) return;
+
+    try {
+      const topicIndex = parseInt(topicNumber) - 1;
+
+      // Get current progress data
+      const progressDataJSON = localStorage.getItem(`progress_${courseId}`);
+      let progressData = progressDataJSON
+        ? JSON.parse(progressDataJSON)
+        : { overallProgress: 0, topics: [] };
+
+      if (!progressData.topics) {
+        progressData.topics = [];
+      }
+
+      // Initialize topic object if needed
+      if (!progressData.topics[topicIndex]) {
+        progressData.topics[topicIndex] = {
+          progress: 0,
+          completed: false,
+        };
+      }
+
+      // Update progress, don't decrease existing progress
+      progressData.topics[topicIndex].progress = Math.max(
+        progressData.topics[topicIndex].progress,
+        newProgress
+      );
+
+      // Mark as completed if requested
+      if (markCompleted) {
+        progressData.topics[topicIndex].progress = 100;
+        progressData.topics[topicIndex].completed = true;
+      }
+
+      // Recalculate overall progress
+      const roadmapItemsJSON = localStorage.getItem(`roadmapItems_${courseId}`);
+      if (roadmapItemsJSON) {
+        const roadmapItems = JSON.parse(roadmapItemsJSON);
+        const totalTopics = roadmapItems.length;
+        let completedProgress = 0;
+
+        progressData.topics.forEach((topic: any) => {
+          if (topic && topic.progress) {
+            completedProgress += topic.progress;
+          }
+        });
+
+        progressData.overallProgress = Math.round(
+          completedProgress / totalTopics
+        );
+      }
+
+      // Save updated progress
+      localStorage.setItem(
+        `progress_${courseId}`,
+        JSON.stringify(progressData)
+      );
+
+      // Update local state
+      setTopic((prev) =>
+        prev
+          ? {
+              ...prev,
+              progress: markCompleted
+                ? 100
+                : Math.max(prev.progress, newProgress),
+              completed: markCompleted || prev.completed,
+            }
+          : null
+      );
+
+      // Send to backend if possible
+      try {
+        const topicNum = parseInt(topicNumber);
+        api
+          .updateTopicProgress(courseId, userId, {
+            topic_number: topicNum,
+            progress: markCompleted ? 100 : newProgress,
+            completed: markCompleted,
+          })
+          .then(() => {
+            console.log("Progress data sent to backend successfully");
+          })
+          .catch((error) => {
+            console.error("Error sending progress to backend:", error);
+          });
+      } catch (error) {
+        console.error("Error preparing progress data for backend:", error);
+      }
+    } catch (error) {
+      console.error("Error updating topic progress:", error);
+    }
+  };
+
+  const handleMarkAsComplete = () => {
+    updateTopicProgress(100, true);
+    toast.success("Topic marked as complete!");
+  };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="animate-pulse">
+          <div className="h-8 w-1/3 bg-muted rounded mb-4"></div>
+          <div className="h-4 bg-muted rounded mb-2"></div>
+          <div className="h-4 bg-muted rounded mb-2"></div>
+          <div className="h-4 bg-muted rounded"></div>
+        </div>
+      </div>
+    );
+  }
 
   if (!topic) {
     return (
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold">Topic not found</h1>
-        <Link href="/roadmap">
-          <Button className="mt-4">Back to Roadmap</Button>
+        <Link href={`/dashboard/${courseId}`}>
+          <Button className="mt-4">Back to Dashboard</Button>
         </Link>
       </div>
-    )
+    );
   }
-
-  const currentQuestion = topic.questions[currentQuestionIndex]
-  const progress = ((currentQuestionIndex + 1) / topic.questions.length) * 100
-
-  const handleAnswerSelect = (answer: string) => {
-    if (!isAnswerSubmitted) {
-      setSelectedAnswer(answer)
-    }
-  }
-
-  const handleSubmitAnswer = () => {
-    if (selectedAnswer) {
-      setIsAnswerSubmitted(true)
-      if (selectedAnswer === currentQuestion.correctAnswer) {
-        setCorrectAnswers((prev) => prev + 1)
-      }
-    }
-  }
-
-  const handleNextQuestion = () => {
-    setSelectedAnswer(null)
-    setIsAnswerSubmitted(false)
-    setCurrentQuestionIndex((prev) => prev + 1)
-  }
-
-  const isQuizCompleted = currentQuestionIndex >= topic.questions.length - 1 && isAnswerSubmitted
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center">
-          <Link href="/roadmap">
+          <Link
+            href={
+              fromRoadmap ? `/roadmap/${courseId}` : `/dashboard/${courseId}`
+            }
+          >
             <Button variant="ghost" size="sm" className="mr-2">
-              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Roadmap
+              <ArrowLeft className="mr-2 h-4 w-4" /> Back to{" "}
+              {fromRoadmap ? "Roadmap" : "Dashboard"}
             </Button>
           </Link>
           <h2 className="text-2xl font-bold text-foreground">{topic.title}</h2>
@@ -123,101 +251,102 @@ export default function TopicQuiz({ params }: { params: { id: string } }) {
         <ThemeToggle />
       </div>
 
-      <div className="mb-6">
-        <p className="text-muted-foreground">{topic.description}</p>
-      </div>
+      <div className="grid gap-6 md:grid-cols-3">
+        {/* Main content - 2/3 width on desktop */}
+        <div className="md:col-span-2">
+          <Card className="mb-6">
+            <div className="p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center">
+                  <BookOpen className="mr-2 h-5 w-5 text-primary" />
+                  <span className="font-medium">Study Material</span>
+                </div>
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Clock className="mr-1 h-4 w-4" />
+                  <span>
+                    Time spent: {Math.floor(timeSpent / 60)}m {timeSpent % 60}s
+                  </span>
+                </div>
+              </div>
 
-      <div className="mb-4">
-        <div className="flex justify-between text-sm">
-          <span>
-            Question {currentQuestionIndex + 1} of {topic.questions.length}
-          </span>
-          <span>{correctAnswers} correct</span>
-        </div>
-        <Progress value={progress} className="h-2" />
-      </div>
+              <div className="mb-4">
+                <Progress value={topic.progress} className="h-2" />
+                <div className="mt-1 text-right text-sm text-muted-foreground">
+                  {topic.completed ? (
+                    <span className="text-green-500 flex items-center justify-end">
+                      <CheckCircle className="mr-1 h-3 w-3" /> Completed
+                    </span>
+                  ) : (
+                    `${topic.progress}% Complete`
+                  )}
+                </div>
+              </div>
 
-      {!isQuizCompleted ? (
-        <Card className="overflow-hidden">
-          <div className="border-b p-6">
-            <h2 className="text-xl font-medium">{currentQuestion.question}</h2>
-          </div>
-
-          <div className="p-4">
-            <div className="space-y-2">
-              {currentQuestion.options.map((option) => {
-                const isCorrect = isAnswerSubmitted && option === currentQuestion.correctAnswer
-                const isIncorrect =
-                  isAnswerSubmitted && selectedAnswer === option && option !== currentQuestion.correctAnswer
-
-                return (
-                  <div
-                    key={option}
-                    className={`flex cursor-pointer items-center rounded-md border p-4 transition-colors ${
-                      selectedAnswer === option
-                        ? isAnswerSubmitted
-                          ? isCorrect
-                            ? "border-green-500 bg-green-900/20"
-                            : "border-red-500 bg-red-900/20"
-                          : "border-primary bg-primary/10"
-                        : "border-border hover:border-muted-foreground hover:bg-muted/50"
-                    }`}
-                    onClick={() => handleAnswerSelect(option)}
-                  >
-                    <div className="flex-1">{option}</div>
-                    {isAnswerSubmitted && (
-                      <div className="ml-2">
-                        {isCorrect && <CheckCircle className="h-5 w-5 text-green-500" />}
-                        {isIncorrect && <X className="h-5 w-5 text-red-500" />}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                {topic.content.split("\n").map((paragraph, i) => (
+                  <p key={i}>{paragraph}</p>
+                ))}
+              </div>
             </div>
-          </div>
+          </Card>
 
-          <div className="bg-muted p-4">
-            {!isAnswerSubmitted ? (
-              <Button onClick={handleSubmitAnswer} disabled={!selectedAnswer} className="w-full">
-                Submit Answer
-              </Button>
-            ) : (
-              <Button onClick={handleNextQuestion} className="w-full">
-                Next Question
-              </Button>
-            )}
-          </div>
-        </Card>
-      ) : (
-        <Card className="p-6 text-center">
-          <div className="mb-4 flex justify-center">
-            <div className="rounded-full bg-green-900/20 p-3">
-              <CheckCircle className="h-12 w-12 text-green-500" />
+          <div className="flex justify-between">
+            <div className="flex space-x-4">
+              <Link
+                href={`/topics/${courseId}/quiz?topicNumber=${topicNumber}${
+                  fromRoadmap ? "&from=roadmap" : ""
+                }`}
+              >
+                <Button>Take Quiz</Button>
+              </Link>
+
+              {!topic.completed && (
+                <Button
+                  variant="outline"
+                  className="border-green-500 text-green-500 hover:bg-green-500/10"
+                  onClick={handleMarkAsComplete}
+                >
+                  <CheckSquare className="mr-2 h-4 w-4" />
+                  Mark as Complete
+                </Button>
+              )}
             </div>
-          </div>
-          <h2 className="mb-2 text-2xl font-bold">Quiz Completed!</h2>
-          <p className="mb-6 text-muted-foreground">
-            You got {correctAnswers} out of {topic.questions.length} questions correct.
-          </p>
-          <div className="flex justify-center space-x-4">
-            <Button
-              onClick={() => {
-                setCurrentQuestionIndex(0)
-                setSelectedAnswer(null)
-                setIsAnswerSubmitted(false)
-                setCorrectAnswers(0)
-              }}
+
+            <Link
+              href={
+                fromRoadmap ? `/roadmap/${courseId}` : `/dashboard/${courseId}`
+              }
             >
-              Retry Quiz
-            </Button>
-            <Link href="/roadmap">
-              <Button variant="outline">Back to Roadmap</Button>
+              <Button variant="ghost">
+                Return to {fromRoadmap ? "Roadmap" : "Dashboard"}
+              </Button>
             </Link>
           </div>
-        </Card>
-      )}
-    </div>
-  )
-}
+        </div>
 
+        {/* Sidebar - 1/3 width on desktop */}
+        <div className="md:relative">
+          <div className="md:sticky md:top-6 space-y-6">
+            {/* Pomodoro Timer */}
+            <Card className="p-6">
+              <h2 className="mb-4 text-lg font-semibold">Study Timer</h2>
+              <div className="flex flex-col items-center">
+                <CircularTimer />
+                <p className="mt-4 text-sm text-muted-foreground text-center">
+                  Use the Pomodoro technique: 25 minutes of focused work
+                  followed by a 5-minute break.
+                </p>
+              </div>
+            </Card>
+
+            {/* Calendar widget */}
+            <Card className="p-6">
+              <h2 className="mb-4 text-lg font-semibold">Study Calendar</h2>
+              <Calendar />
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

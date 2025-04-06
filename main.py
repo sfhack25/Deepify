@@ -24,7 +24,7 @@ import os
 import json
 from dotenv import load_dotenv
 import tempfile
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from typing import List, Optional
 import re
 import pdfplumber
@@ -35,7 +35,8 @@ from pydantic import BaseModel, Field
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from google import genai
-from datetime import date
+from fastapi import Body
+from enum import Enum
 load_dotenv()
 
 
@@ -90,6 +91,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+class RatingEnum(str, Enum):
+    easy = "easy"
+    medium = "medium"
+    hard = "hard"
+    dont_know = "dont_know"
+
+rating_schedule = {
+    "easy": 7,
+    "medium": 3,
+    "hard": 1,
+    "dont_know": 1
+}
 
 # ---------------------------------------------------------------------------
 # Startup and shutdown events
@@ -274,8 +288,7 @@ async def get_roadmap(course_id: str):
         raise HTTPException(status_code=500, detail=f"Error retrieving roadmap: {str(e)}")
 
 
-
-@app.post("/courses/{course_id}/quizzes/pre", summary="Generate pre-lecture quiz for all roadmap topics")
+@app.post("/courses/{course_id}/quizzes/pre", summary="Generate flashcard-style pre-lecture quiz for all roadmap topics")
 async def generate_pre_quiz(course_id: str):
     try:
         obj_id = ObjectId(course_id)
@@ -297,17 +310,17 @@ async def generate_pre_quiz(course_id: str):
                 continue  # skip entries without quiz input data
 
             quiz_prompt = f"""
-Create 10 multiple-choice questions (A–D) with answers to help a student prepare for a lecture on:
+Create 10 flashcard-style questions to help a student study this topic:
 
 Topic: {topic}
 Prompt: {prompt}
 
+Each question should be a simple question or recall prompt, and each should have a clear answer.
 Return ONLY valid JSON in this format:
 [
   {{
     "question": "...",
-    "choices": ["A...", "B...", "C...", "D..."],
-    "answer": "B"
+    "answer": "..."
   }},
   ...
 ]
@@ -328,8 +341,21 @@ Return ONLY valid JSON in this format:
 
                 quiz_data = json.loads(stripped)
 
-                all_quizzes.append({
+                # Add index from 1 to 10
+                for i, item in enumerate(quiz_data):
+                    item["index"] = i + 1
+
+                topic_number = len(all_quizzes) + 1
+                await db.quizzes.insert_one({
+                    "course_id": obj_id,
                     "topic": topic,
+                    "topic_number": topic_number,
+                    "quiz": quiz_data,
+                    "created_at": datetime.utcnow()
+                })
+
+                all_quizzes.append({
+                    "topic_number": topic_number,
                     "quiz": quiz_data
                 })
 
@@ -343,3 +369,127 @@ Return ONLY valid JSON in this format:
 
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"Internal error: {err}")
+
+@app.get("/courses/{course_id}/quizzes", summary="Fetch all saved quizzes for a course")
+async def get_quizzes(course_id: str):
+    try:
+        obj_id = ObjectId(course_id)
+        quizzes_cursor = db.quizzes.find({"course_id": obj_id})
+        quizzes = []
+        async for quiz in quizzes_cursor:
+            quiz["_id"] = str(quiz["_id"])
+            quiz["course_id"] = str(quiz["course_id"])
+            quizzes.append(quiz)
+        return {"quizzes": quizzes}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve quizzes: {e}")
+
+
+@app.post("/quizzes/{quiz_id}/attempt", summary="Submit a question-level quiz attempt")
+async def submit_quiz_attempt(
+    quiz_id: str,
+    user_id: str = Body(...),
+    topic_number: int = Body(...),
+    responses: List[dict] = Body(...)
+):
+    try:
+        obj_id = ObjectId(quiz_id)
+        quiz = await db.quizzes.find_one({"_id": obj_id})
+        if not quiz:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+
+        enriched_responses = []
+        for i, r in enumerate(responses):
+            rating = r.get("user_rating")
+            delay_days = rating_schedule.get(rating, 1)
+            next_due_date = datetime.utcnow().date() + timedelta(days=delay_days)
+
+            enriched_responses.append({
+                "question_number": i + 1,
+                "question": r.get("question"),
+                "answer": r.get("answer"),
+                "user_rating": rating,
+                "next_due_date": str(next_due_date)
+            })
+
+        attempt_doc = {
+            "quiz_id": obj_id,
+            "user_id": user_id,
+            "topic_number": topic_number,
+            "responses": enriched_responses,
+            "taken_at": datetime.utcnow()
+        }
+
+        result = await db.attempts.insert_one(attempt_doc)
+        return {"status": "success", "attempt_id": str(result.inserted_id)}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save attempt: {e}")
+
+
+# ────────────────────────────────────────────────────
+# Fetch Upcoming Due Questions for a User
+# ────────────────────────────────────────────────────
+
+@app.get("/users/{user_id}/schedule", summary="Get upcoming questions due for review")
+async def get_due_schedule(user_id: str):
+    try:
+        today = datetime.utcnow().date()
+        upcoming = []
+
+        cursor = db.attempts.find({"user_id": user_id})
+        async for attempt in cursor:
+            for resp in attempt.get("responses", []):
+                due_date = datetime.strptime(resp["next_due_date"], "%Y-%m-%d").date()
+                if due_date <= today:
+                    upcoming.append({
+                        "attempt_id": str(attempt["_id"]),
+                        "quiz_id": str(attempt["quiz_id"]),
+                        "topic_number": attempt["topic_number"],
+                        "question_number": resp.get("question_number"),
+                        "question": resp["question"],
+                        "answer": resp["answer"],
+                        "due_date": resp["next_due_date"]
+                    })
+
+        return {"due_questions": upcoming}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch schedule: {e}")
+
+
+# ────────────────────────────────────────────────────
+# PATCH: Update user rating for a specific question in an attempt
+# ────────────────────────────────────────────────────
+
+@app.patch("/attempts/{attempt_id}/update", summary="Update rating for a question")
+async def update_question_rating(
+    attempt_id: str,
+    topic_number: int = Body(...),
+    question_number: int = Body(...),
+    new_rating: RatingEnum = Body(...)
+):
+    try:
+        obj_id = ObjectId(attempt_id)
+        attempt = await db.attempts.find_one({"_id": obj_id})
+        if not attempt:
+            raise HTTPException(status_code=404, detail="Attempt not found")
+
+        updated = False
+        for response in attempt["responses"]:
+            if response.get("question_number") == question_number:
+                delay_days = rating_schedule.get(new_rating, 1)
+                next_due = datetime.utcnow().date() + timedelta(days=delay_days)
+                response["user_rating"] = new_rating
+                response["next_due_date"] = str(next_due)
+                updated = True
+                break
+
+        if not updated:
+            raise HTTPException(status_code=404, detail="Question not found in this attempt")
+
+        await db.attempts.update_one({"_id": obj_id}, {"$set": {"responses": attempt["responses"]}})
+        return {"status": "updated", "question_number": question_number, "new_due": str(next_due)}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update rating: {e}")

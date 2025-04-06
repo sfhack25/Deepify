@@ -97,6 +97,8 @@ Deepify is an AI-powered study platform that transforms how students engage with
 - PDF extraction might not preserve complex formatting
 - API rate limits apply for the free tier of Gemini AI
 
+<img src="./3.png>
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.

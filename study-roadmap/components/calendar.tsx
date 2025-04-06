@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export function Calendar() {
-  const [currentDate, setCurrentDate] = useState(new Date()); // State to track the current date
+  const [currentDate, setCurrentDate] = useState(new Date());
   const currentMonth = currentDate.toLocaleString("default", { month: "long" });
   const currentYear = currentDate.getFullYear();
-  const currentDay = new Date().getDate(); // Today's date
+  const currentDay = new Date().getDate();
 
-  // Generate days for the current month
   const daysInMonth = new Date(
     currentDate.getFullYear(),
     currentDate.getMonth() + 1,
@@ -17,17 +17,10 @@ export function Calendar() {
     currentDate.getMonth(),
     1
   ).getDay();
-
-  // Create array of day numbers
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-
-  // Create empty slots for days before the first day of the month
   const emptyDays = Array.from({ length: firstDayOfMonth }, () => null);
-
-  // Combine empty days and actual days
   const allDays = [...emptyDays, ...days];
 
-  // State for selected day and tasks
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [tasks, setTasks] = useState<{
     [key: number]: {
@@ -40,7 +33,6 @@ export function Calendar() {
   }>({});
   const [newTask, setNewTask] = useState("");
 
-  // Fetch tasks from the database when the component loads or when the month changes
   useEffect(() => {
     const fetchTasks = async () => {
       try {
@@ -55,7 +47,6 @@ export function Calendar() {
           const data = await response.json();
           const tasksFromDB = data.tasks;
 
-          // Transform tasks into the format required by the calendar
           const transformedTasks = tasksFromDB.reduce((acc: any, task: any) => {
             const day = task.day;
             if (
@@ -84,28 +75,25 @@ export function Calendar() {
     };
 
     fetchTasks();
-  }, [currentDate]); // Re-run when the currentDate changes
+  }, [currentDate]);
 
-  // Handle adding a task
   const handleAddTask = async () => {
     if (!newTask.trim() || !selectedDay) return;
 
     const taskObject = {
-      id: `${selectedDay}-${Date.now()}`, // Unique ID based on day and timestamp
+      id: `${selectedDay}-${Date.now()}`,
       description: newTask,
-      timestamp: new Date().toISOString(), // ISO timestamp
-      month: currentDate.getMonth() + 1, // Current month (1-based)
-      year: currentDate.getFullYear(), // Current year
+      timestamp: new Date().toISOString(),
+      month: currentDate.getMonth() + 1,
+      year: currentDate.getFullYear(),
     };
 
-    // Update the local state
     setTasks((prevTasks) => ({
       ...prevTasks,
       [selectedDay]: [...(prevTasks[selectedDay] || []), taskObject],
     }));
     setNewTask("");
 
-    // Send the task to the backend
     try {
       const response = await fetch("http://localhost:8002/upload-tasks", {
         method: "POST",
@@ -114,7 +102,7 @@ export function Calendar() {
         },
         body: JSON.stringify({
           day: selectedDay,
-          tasks: [taskObject], // Send the new task as an array
+          tasks: [taskObject],
         }),
       });
 
@@ -128,18 +116,19 @@ export function Calendar() {
     }
   };
 
-  // Handle deleting a task
   const handleDeleteTask = async (taskId: string) => {
+    if (!selectedDay) return; // Ensure a day is selected
+
     // Update the local state to remove the task
     setTasks((prevTasks) => {
       const updatedTasks = { ...prevTasks };
-      updatedTasks[selectedDay!] = updatedTasks[selectedDay!].filter(
+      updatedTasks[selectedDay] = updatedTasks[selectedDay]?.filter(
         (task) => task.id !== taskId
       );
 
       // If no tasks remain for the day, remove the day from the tasks object
-      if (updatedTasks[selectedDay!]?.length === 0) {
-        delete updatedTasks[selectedDay!];
+      if (updatedTasks[selectedDay]?.length === 0) {
+        delete updatedTasks[selectedDay];
       }
 
       return updatedTasks;
@@ -164,14 +153,12 @@ export function Calendar() {
     }
   };
 
-  // Navigate to the previous month
   const handlePrevMonth = () => {
     setCurrentDate(
       (prevDate) => new Date(prevDate.getFullYear(), prevDate.getMonth() - 1, 1)
     );
   };
 
-  // Navigate to the next month
   const handleNextMonth = () => {
     setCurrentDate(
       (prevDate) => new Date(prevDate.getFullYear(), prevDate.getMonth() + 1, 1)
@@ -185,7 +172,7 @@ export function Calendar() {
           className="rounded bg-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
           onClick={handlePrevMonth}
         >
-          ←
+          Previous
         </button>
         <h2 className="text-xl font-semibold text-card-foreground">
           {currentMonth} {currentYear}
@@ -194,7 +181,7 @@ export function Calendar() {
           className="rounded bg-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
           onClick={handleNextMonth}
         >
-          →
+          Next
         </button>
       </div>
 
@@ -229,61 +216,107 @@ export function Calendar() {
         ))}
       </div>
 
-      {selectedDay && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="w-96 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
-            <h3 className="mb-4 text-lg font-semibold dark:text-white">
-              Tasks for {currentMonth} {selectedDay}
-            </h3>
-
-            <ul className="mb-4 space-y-2">
-              {tasks[selectedDay]?.map((task) => (
-                <li
-                  key={task.id}
-                  className="flex items-center justify-between rounded bg-gray-100 p-2 text-sm dark:bg-gray-700 dark:text-gray-200"
-                >
-                  <span>{task.description}</span>
-                  <button
-                    className="text-red-500 hover:text-red-700"
-                    onClick={() => handleDeleteTask(task.id)}
-                  >
-                    Delete
-                  </button>
-                </li>
-              ))}
-              {tasks[selectedDay]?.length === 0 && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  No tasks yet.
-                </p>
-              )}
-            </ul>
-
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                className="flex-1 rounded border px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-                placeholder="Add a task or quiz"
-                value={newTask}
-                onChange={(e) => setNewTask(e.target.value)}
-              />
-              <button
-                className="rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600"
-                onClick={handleAddTask}
-              >
-                Add
-              </button>
-            </div>
-
-            {/* Close Button */}
-            <button
-              className="mt-4 w-full rounded bg-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
-              onClick={() => setSelectedDay(null)}
+      <AnimatePresence>
+        {selectedDay && (
+          <motion.div
+            className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="w-96 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800"
+              initial={{ scale: 0, rotate: 0 }}
+              animate={{
+                scale: [0.5, 1.2, 1],
+                rotate: [0, 360, 0],
+                transition: { duration: 1, ease: "easeInOut" },
+              }}
+              exit={{
+                scale: 0,
+                rotate: -360,
+                opacity: 0,
+                transition: { duration: 0.5, ease: "easeInOut" },
+              }}
             >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
+              <motion.h3
+                className="mb-4 text-lg font-semibold dark:text-white"
+                initial={{ y: -50, opacity: 0 }}
+                animate={{
+                  y: 0,
+                  opacity: 1,
+                  transition: { delay: 0.2, duration: 0.5 },
+                }}
+              >
+                Tasks for {currentMonth} {selectedDay}
+              </motion.h3>
+
+              <motion.ul
+                className="mb-4 space-y-2"
+                initial={{ opacity: 0 }}
+                animate={{
+                  opacity: 1,
+                  transition: { delay: 0.4, duration: 0.5 },
+                }}
+              >
+                {tasks[selectedDay]?.map((task) => (
+                  <motion.li
+                    key={task.id}
+                    className="flex items-center justify-between rounded bg-gray-100 p-2 text-sm dark:bg-gray-700 dark:text-gray-200"
+                    initial={{ x: -100, opacity: 0 }}
+                    animate={{
+                      x: 0,
+                      opacity: 1,
+                      transition: { duration: 0.5 },
+                    }}
+                    exit={{ x: 100, opacity: 0, transition: { duration: 0.5 } }}
+                  >
+                    <span>{task.description}</span>
+                    <button
+                      className="text-red-500 hover:text-red-700"
+                      onClick={() => console.log("Delete task")}
+                    >
+                      Delete
+                    </button>
+                  </motion.li>
+                ))}
+              </motion.ul>
+
+              <motion.div
+                className="flex items-center space-x-2"
+                initial={{ opacity: 0 }}
+                animate={{
+                  opacity: 1,
+                  transition: { delay: 0.6, duration: 0.5 },
+                }}
+              >
+                <input
+                  type="text"
+                  className="flex-1 rounded border px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                  placeholder="Add a task or quiz"
+                  value={newTask}
+                  onChange={(e) => setNewTask(e.target.value)}
+                />
+                <button
+                  className="rounded bg-blue-500 px-3 py-1 text-sm text-white hover:bg-blue-600"
+                  onClick={() => console.log("Add task")}
+                >
+                  Add
+                </button>
+              </motion.div>
+
+              <motion.button
+                className="mt-4 w-full rounded bg-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+                onClick={() => setSelectedDay(null)}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+              >
+                Close
+              </motion.button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

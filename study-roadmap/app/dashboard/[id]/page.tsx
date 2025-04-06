@@ -298,6 +298,24 @@ export default function Dashboard({ params }: { params: { id: string } }) {
     }
   };
 
+  // Function to redirect to a random topic quiz
+  const handleRandomTopicQuiz = () => {
+    // Only proceed if we have roadmap items
+    if (roadmapItems.length === 0) {
+      toast.error("No topics available. Upload a syllabus first.");
+      return;
+    }
+
+    // Get a random topic index
+    const randomIndex = Math.floor(Math.random() * roadmapItems.length);
+    const randomTopic = roadmapItems[randomIndex];
+
+    // Navigate to the random topic's pre-lecture quiz
+    window.location.href = `/topics/${courseId}/quiz?topicNumber=${randomTopic.id}`;
+
+    toast.success(`Selected quiz for topic: ${randomTopic.title}`);
+  };
+
   const calculateOverallProgress = () => {
     // First check if we have progress data in localStorage
     try {
@@ -491,15 +509,15 @@ export default function Dashboard({ params }: { params: { id: string } }) {
               </Link>
               <Link href={`/topics/${courseId}/quiz`}>
                 <Button variant="subtle" className="w-full">
-                  <Sparkles className="mr-2 h-4 w-4" /> Practice Quizzes
+                  <Sparkles className="mr-2 h-4 w-4" /> Finals Exam Preperation
                 </Button>
               </Link>
               <Button
                 variant="subtle"
                 className="w-full"
-                onClick={handleGenerateQuizzes}
+                onClick={handleRandomTopicQuiz}
               >
-                <Zap className="mr-2 h-4 w-4" /> Generate Quizzes
+                <Zap className="mr-2 h-4 w-4" /> Random Topic Quiz
               </Button>
             </div>
 

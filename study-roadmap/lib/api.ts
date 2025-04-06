@@ -156,6 +156,29 @@ export const api = {
     return response.json();
   },
 
+  // Delete a course
+  async deleteCourse(courseId: string): Promise<{ status: string }> {
+    const response = await fetch(`${API_URL}/courses/${courseId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      try {
+        const errorData = await response.json();
+        throw new Error(
+          typeof errorData.detail === "string"
+            ? errorData.detail
+            : JSON.stringify(errorData.detail) || "Failed to delete course"
+        );
+      } catch (jsonError) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Server error: ${response.status}`);
+      }
+    }
+
+    return response.json();
+  },
+
   // Generate pre-lecture quizzes
   async generatePreQuizzes(courseId: string): Promise<QuizResponse> {
     const response = await fetch(`${API_URL}/courses/${courseId}/quizzes/pre`, {
@@ -340,24 +363,40 @@ export const api = {
     topicId: number,
     title: string,
     content: string,
-    image?: File
-  ): Promise<{ status: string; notes_id: string }> {
+    image?: File,
+    noteFile?: File
+  ): Promise<{
+    status: string;
+    notes_id: string;
+    image_id?: string;
+    file_id?: string;
+    extracted_text_length?: number;
+  }> {
     try {
       const formData = new FormData();
       formData.append("title", title);
       formData.append("content", content);
       formData.append("topic_number", topicId.toString());
 
+      // Add image file if provided
       if (image) {
-        formData.append("image", image, image.name);
+        formData.append("image", image);
       }
 
-      console.log("Uploading notes:", {
-        courseId,
-        topicId,
+      // Add document file if provided
+      if (noteFile) {
+        formData.append("file", noteFile);
+      }
+
+      console.log("API Request:", {
+        url: `${API_URL}/courses/${courseId}/notes`,
+        method: "POST",
         title,
+        hasContent: !!content,
         hasImage: !!image,
-        imageSize: image?.size,
+        hasFile: !!noteFile,
+        imageType: image?.type,
+        fileType: noteFile?.type,
       });
 
       const response = await fetch(`${API_URL}/courses/${courseId}/notes`, {
@@ -365,9 +404,12 @@ export const api = {
         body: formData,
       });
 
+      console.log("API Response Status:", response.status, response.statusText);
+
       if (!response.ok) {
         try {
           const errorData = await response.json();
+          console.log("API Error (JSON):", errorData);
           throw new Error(
             typeof errorData.detail === "string"
               ? errorData.detail
@@ -375,15 +417,16 @@ export const api = {
           );
         } catch (jsonError) {
           const errorText = await response.text();
+          console.log("API Error (Text):", errorText);
           throw new Error(errorText || `Server error: ${response.status}`);
         }
       }
 
       const result = await response.json();
-      console.log("Notes upload success:", result);
+      console.log("API Success:", result);
       return result;
     } catch (error) {
-      console.error("Error uploading notes:", error);
+      console.error("Error in uploadNotes:", error);
       throw error;
     }
   },

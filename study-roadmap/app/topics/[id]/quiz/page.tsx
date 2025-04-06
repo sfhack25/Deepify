@@ -273,6 +273,15 @@ export default function QuizPage() {
     }
   };
 
+  // Add a handler for going to the previous question
+  const handlePrevious = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(currentQuestionIndex - 1);
+      setFlipped(false);
+      setUserRating(null);
+    }
+  };
+
   const submitQuizAttempt = async () => {
     try {
       const currentQuiz = quizzes[currentQuizIndex];
@@ -893,42 +902,84 @@ export default function QuizPage() {
             </div>
 
             {flipped && (
-              <div className="mt-8 grid grid-cols-2 gap-4">
-                <Button
-                  variant="outline"
-                  className="border-green-500 text-green-500 hover:bg-green-500/10"
-                  onClick={() => handleRating("easy")}
-                >
-                  Easy
-                </Button>
-                <Button
-                  variant="outline"
-                  className="border-yellow-500 text-yellow-500 hover:bg-yellow-500/10"
-                  onClick={() => handleRating("medium")}
-                >
-                  Medium
-                </Button>
-                <Button
-                  variant="outline"
-                  className="border-red-500 text-red-500 hover:bg-red-500/10"
-                  onClick={() => handleRating("hard")}
-                >
-                  Hard
-                </Button>
-                <Button
-                  variant="outline"
-                  className="border-gray-500 text-gray-500 hover:bg-gray-500/10"
-                  onClick={() => handleRating("dont_know")}
-                >
-                  Don't Know
-                </Button>
+              <div className="mt-8">
+                {/* Navigation buttons for the back of the card at the same level as rating */}
+                <div className="mb-4 flex justify-between">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent rating action
+                      handlePrevious();
+                    }}
+                    disabled={currentQuestionIndex <= 0}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent rating action
+                      handleNext();
+                    }}
+                    disabled={
+                      currentQuestionIndex >= currentQuiz.quiz.length - 1
+                    }
+                  >
+                    Next <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Button
+                    variant="outline"
+                    className="border-green-500 text-green-500 hover:bg-green-500/10"
+                    onClick={() => handleRating("easy")}
+                  >
+                    Easy
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-yellow-500 text-yellow-500 hover:bg-yellow-500/10"
+                    onClick={() => handleRating("medium")}
+                  >
+                    Medium
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-red-500 text-red-500 hover:bg-red-500/10"
+                    onClick={() => handleRating("hard")}
+                  >
+                    Hard
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-gray-500 text-gray-500 hover:bg-gray-500/10"
+                    onClick={() => handleRating("dont_know")}
+                  >
+                    Don't Know
+                  </Button>
+                </div>
               </div>
             )}
 
             {!flipped && (
-              <div className="mt-8 flex justify-end">
-                <Button onClick={handleFlip}>
-                  Show Answer <ArrowRight className="ml-2 h-4 w-4" />
+              <div className="mt-8 flex justify-between">
+                <Button
+                  variant="outline"
+                  onClick={handlePrevious}
+                  disabled={currentQuestionIndex <= 0}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Previous
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => handleNext()}
+                  disabled={currentQuestionIndex >= currentQuiz.quiz.length - 1}
+                >
+                  Next <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             )}

@@ -74,17 +74,41 @@ export default function UploadNotes({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate input
+    if (!noteTitle) {
+      toast.error("Please provide a title for your notes");
+      return;
+    }
+
+    // Make sure at least one of content, file, or image is provided
+    if (!noteText && !file && !image) {
+      toast.error(
+        "Please provide either text, a file, or an image for your notes"
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
       // First save notes to the backend
-      await api.uploadNotes(
+      const uploadResult = await api.uploadNotes(
         subjectId,
         topicId,
         noteTitle,
         noteText,
-        image || undefined
+        image || undefined,
+        file || undefined
       );
+
+      if (
+        uploadResult.extracted_text_length &&
+        uploadResult.extracted_text_length > 0
+      ) {
+        toast.info(
+          `Successfully extracted ${uploadResult.extracted_text_length} characters from your file`
+        );
+      }
 
       // Save the fact that notes have been uploaded for this topic in localStorage
       const notesDataJSON = localStorage.getItem(`notes_${subjectId}`);
@@ -95,6 +119,9 @@ export default function UploadNotes({
 
       // Save back to localStorage
       localStorage.setItem(`notes_${subjectId}`, JSON.stringify(notesData));
+
+      // Show generating quiz message
+      toast.info("Generating quiz from your notes...");
 
       // Then generate a quiz from the notes
       await api.generateNotesQuiz(subjectId, topicId);
@@ -155,7 +182,8 @@ export default function UploadNotes({
                   className="resize-none"
                 />
                 <p className="text-sm text-muted-foreground">
-                  Or upload a file below.
+                  You can type notes text, upload a file, or upload an image. At
+                  least one of these is required.
                 </p>
               </div>
 
@@ -195,11 +223,11 @@ export default function UploadNotes({
 
               {/* Image Upload Section */}
               <div className="space-y-2">
-                <Label htmlFor="note-image">Upload Image</Label>
+                <Label htmlFor="note-image">Upload Image of Notes</Label>
                 <div className="flex items-center justify-center rounded-md border-2 border-dashed border-border p-6">
                   <div className="text-center">
                     <Camera className="mx-auto h-12 w-12 text-muted-foreground" />
-                    <div className="mt-2 flex text-sm text-muted-foreground">
+                    <div className="mt-2 flex text-sm text-muted-foreground items-center justify-center">
                       <label
                         htmlFor="note-image"
                         className="relative cursor-pointer rounded-md font-medium text-primary hover:text-primary/80"
@@ -217,7 +245,14 @@ export default function UploadNotes({
                       <p className="pl-1">or drag and drop</p>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      PNG, JPG, WEBP up to 5MB
+                      PNG, JPG, WEBP up to 5MB.{" "}
+                      <span className="font-semibold">
+                        Handwritten notes work too!
+                      </span>
+                    </p>
+                    <p className="text-xs mt-1 text-muted-foreground italic">
+                      Our AI will analyze your handwritten notes and create quiz
+                      questions from them.
                     </p>
 
                     {imagePreview && (
@@ -237,6 +272,12 @@ export default function UploadNotes({
                             className="object-contain rounded-md"
                           />
                         </div>
+                        {!noteText && !file && (
+                          <p className="mt-2 text-sm font-medium text-primary">
+                            Using this image to generate quizzes (no text
+                            provided)
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>

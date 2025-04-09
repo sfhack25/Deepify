@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Pause, Play, RefreshCw } from "lucide-react";
+import { StreakTracker } from "@/components/streak-tracker";
 
 interface CircularTimerProps {
   initialMode?: "work" | "break";
@@ -176,82 +177,89 @@ export function CircularTimer({ initialMode = "work" }: CircularTimerProps) {
   }, [isRunning, timeLeft, toggleMode]);
 
   return (
-    <div className="flex flex-col items-center">
-      <div className="relative h-48 w-48">
-        {/* Background circle */}
-        <svg className="absolute h-full w-full" viewBox="0 0 100 100">
-          <circle
-            cx="50"
-            cy="50"
-            r="45"
-            fill="transparent"
-            stroke="currentColor"
-            strokeWidth="5"
-            className="text-secondary/50"
-          />
-        </svg>
+    <div>
+      {/* Study Streak Tracker */}
+      <StreakTracker />
 
-        {/* Progress circle */}
-        <svg
-          className="absolute h-full w-full -rotate-90"
-          viewBox="0 0 100 100"
-        >
-          <circle
-            cx="50"
-            cy="50"
-            r="45"
-            fill="transparent"
-            stroke="currentColor"
-            strokeWidth="5"
-            strokeDasharray={strokeDasharray}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            className={mode === "work" ? "text-primary/60" : "text-red-500/60"}
-          />
-        </svg>
+      <div className="flex flex-col items-center mt-6">
+        <div className="relative h-48 w-48">
+          {/* Background circle */}
+          <svg className="absolute h-full w-full" viewBox="0 0 100 100">
+            <circle
+              cx="50"
+              cy="50"
+              r="45"
+              fill="transparent"
+              stroke="currentColor"
+              strokeWidth="5"
+              className="text-secondary/50"
+            />
+          </svg>
 
-        {/* Time display */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <Button
-            variant="ghost"
-            onClick={toggleMode}
-            className={`text-2xl font-bold ${
-              mode === "work" ? "text-primary/80" : "text-red-500/80"
-            }`}
+          {/* Progress circle */}
+          <svg
+            className="absolute h-full w-full -rotate-90"
+            viewBox="0 0 100 100"
           >
-            {mode === "work" ? "Work" : "Break"}
-          </Button>
-          <div className="text-xl font-medium">
-            {formatTime(timeLeft)}
-            <span className="text-sm ml-1">
-              {mode === "work" ? "mins left" : "min left"}
-            </span>
+            <circle
+              cx="50"
+              cy="50"
+              r="45"
+              fill="transparent"
+              stroke="currentColor"
+              strokeWidth="5"
+              strokeDasharray={strokeDasharray}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+              className={
+                mode === "work" ? "text-primary/60" : "text-red-500/60"
+              }
+            />
+          </svg>
+
+          {/* Time display */}
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <Button
+              variant="ghost"
+              onClick={toggleMode}
+              className={`text-2xl font-bold ${
+                mode === "work" ? "text-primary/80" : "text-red-500/80"
+              }`}
+            >
+              {mode === "work" ? "Work" : "Break"}
+            </Button>
+            <div className="text-xl font-medium">
+              {formatTime(timeLeft)}
+              <span className="text-sm ml-1">
+                {mode === "work" ? "mins left" : "min left"}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="mt-4 flex space-x-2">
-        <Button
-          variant="subtle"
-          size="sm"
-          onClick={toggleTimer}
-          className="w-20"
-        >
-          {isRunning ? (
-            <Pause className="h-4 w-4" />
-          ) : (
-            <Play className="h-4 w-4" />
-          )}
-          <span className="ml-1">{isRunning ? "Pause" : "Start"}</span>
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={resetTimer}
-          className="w-20"
-        >
-          <RefreshCw className="h-4 w-4 mr-1" /> Reset
-        </Button>
+        <div className="mt-4 flex space-x-2">
+          <Button
+            variant="subtle"
+            size="sm"
+            onClick={toggleTimer}
+            className="w-20"
+          >
+            {isRunning ? (
+              <Pause className="h-4 w-4" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            <span className="ml-1">{isRunning ? "Pause" : "Start"}</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={resetTimer}
+            className="w-20"
+          >
+            <RefreshCw className="h-4 w-4 mr-1" /> Reset
+          </Button>
+        </div>
       </div>
     </div>
   );

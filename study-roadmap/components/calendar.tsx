@@ -172,7 +172,7 @@ export function Calendar() {
           className="rounded bg-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
           onClick={handlePrevMonth}
         >
-          Previous
+          ←
         </button>
         <h2 className="text-xl font-semibold text-card-foreground">
           {currentMonth} {currentYear}
@@ -181,7 +181,7 @@ export function Calendar() {
           className="rounded bg-gray-200 px-3 py-1 text-sm text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
           onClick={handleNextMonth}
         >
-          Next
+          →
         </button>
       </div>
 
@@ -201,7 +201,7 @@ export function Calendar() {
             className={`relative flex h-8 items-center justify-center rounded-full text-sm cursor-pointer ${
               day === currentDay &&
               currentDate.getMonth() === new Date().getMonth()
-                ? "bg-yellow-900 font-bold text-yellow-100"
+                ? "bg-green-600 font-bold text-yellow-100"
                 : day
                 ? "hover:bg-secondary"
                 : ""

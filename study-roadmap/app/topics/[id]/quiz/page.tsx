@@ -11,6 +11,7 @@ import { api, Quiz, QuizQuestion, QuizAttempt } from "@/lib/api";
 import { toast } from "sonner";
 import { CircularTimer } from "@/components/circular-timer";
 import { Calendar } from "@/components/calendar";
+import { QuizPerformanceSummary } from "@/components/quiz-performance-summary";
 
 export default function QuizPage() {
   const params = useParams();
@@ -578,7 +579,7 @@ export default function QuizPage() {
                 {fromRoadmap ? "Roadmap" : "Dashboard"}
               </Button>
             </Link>
-            <h2 className="text-xl font-bold">Quiz Completed</h2>
+            <h2 className="text-xl font-bold">Quiz Results</h2>
           </div>
           <ThemeToggle />
         </div>
@@ -586,69 +587,41 @@ export default function QuizPage() {
         <div className="grid gap-6 md:grid-cols-3">
           {/* Main content - 2/3 width on desktop */}
           <div className="md:col-span-2">
-            <Card className="p-8 text-center">
-              <h2 className="text-2xl font-bold mb-4">Quiz Completed!</h2>
-              <p className="mb-6 text-muted-foreground">
-                Great job! You've completed the quiz for{" "}
-                {currentQuiz?.topic || "this topic"}. Your progress has been
-                saved.
-              </p>
+            <QuizPerformanceSummary />
 
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold mb-4">
-                  Your Performance Summary
-                </h3>
-                <div className="grid grid-cols-4 gap-4 max-w-lg mx-auto">
-                  <div className="bg-green-100 dark:bg-green-900/20 p-3 rounded-md">
-                    <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                      {quizSummary.easy}
-                    </div>
-                    <div className="text-sm text-green-700 dark:text-green-500">
-                      Easy ({percentages.easy}%)
-                    </div>
-                  </div>
-                  <div className="bg-yellow-100 dark:bg-yellow-900/20 p-3 rounded-md">
-                    <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                      {quizSummary.medium}
-                    </div>
-                    <div className="text-sm text-yellow-700 dark:text-yellow-500">
-                      Medium ({percentages.medium}%)
-                    </div>
-                  </div>
-                  <div className="bg-red-100 dark:bg-red-900/20 p-3 rounded-md">
-                    <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-                      {quizSummary.hard}
-                    </div>
-                    <div className="text-sm text-red-700 dark:text-red-500">
-                      Hard ({percentages.hard}%)
-                    </div>
-                  </div>
-                  <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-md">
-                    <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">
-                      {quizSummary.dont_know}
-                    </div>
-                    <div className="text-sm text-gray-700 dark:text-gray-500">
-                      Don't Know ({percentages.dont_know}%)
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-center space-x-4">
-                <Link
-                  href={
-                    fromRoadmap
-                      ? `/roadmap/${courseId}`
-                      : `/dashboard/${courseId}`
-                  }
-                >
-                  <Button>
-                    Return to {fromRoadmap ? "Roadmap" : "Dashboard"}
-                  </Button>
-                </Link>
+            <div className="flex justify-center space-x-4 mt-6">
+              <Link
+                href={
+                  fromRoadmap
+                    ? `/roadmap/${courseId}`
+                    : `/dashboard/${courseId}`
+                }
+              >
+                <Button variant="outline">
+                  Return to {fromRoadmap ? "Roadmap" : "Dashboard"}
+                </Button>
+              </Link>
+              <Button
+                onClick={() => {
+                  setCurrentQuestionIndex(0);
+                  setResponses([]);
+                  setQuizSummary({
+                    easy: 0,
+                    medium: 0,
+                    hard: 0,
+                    dont_know: 0,
+                    total: 0,
+                  });
+                  setCompleted(false);
+                }}
+              >
+                Retry Quiz
+              </Button>
+              {currentQuizIndex < quizzes.length - 1 && (
                 <Button
                   variant="outline"
                   onClick={() => {
+                    setCurrentQuizIndex(currentQuizIndex + 1);
                     setCurrentQuestionIndex(0);
                     setResponses([]);
                     setQuizSummary({
@@ -661,30 +634,10 @@ export default function QuizPage() {
                     setCompleted(false);
                   }}
                 >
-                  Retry Quiz
+                  Next Topic Quiz
                 </Button>
-                {currentQuizIndex < quizzes.length - 1 && (
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setCurrentQuizIndex(currentQuizIndex + 1);
-                      setCurrentQuestionIndex(0);
-                      setResponses([]);
-                      setQuizSummary({
-                        easy: 0,
-                        medium: 0,
-                        hard: 0,
-                        dont_know: 0,
-                        total: 0,
-                      });
-                      setCompleted(false);
-                    }}
-                  >
-                    Next Topic Quiz
-                  </Button>
-                )}
-              </div>
-            </Card>
+              )}
+            </div>
           </div>
 
           {/* Sidebar - 1/3 width on desktop */}

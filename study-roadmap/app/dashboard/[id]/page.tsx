@@ -656,8 +656,8 @@ export default function Dashboard({ params }: { params: { id: string } }) {
           <div className="md:relative">
             <div className="md:sticky md:top-6 space-y-6">
               {/* Pomodoro Timer */}
-              <Card className="p-6">
-                <h2 className="mb-4 text-lg font-semibold">Study Timer</h2>
+              <Card className="p-4">
+                <h2 className="mb-2 text-lg font-semibold">Study Tracking</h2>
                 <div className="flex flex-col items-center">
                   <CircularTimer />
                   <p className="mt-4 text-sm text-muted-foreground text-center">

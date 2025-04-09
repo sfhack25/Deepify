@@ -1,5 +1,5 @@
-import { LoginForm } from "@/components/login-form"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { LoginForm } from "@/components/login-form";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function Home() {
   return (
@@ -9,14 +9,17 @@ export default function Home() {
           <ThemeToggle />
         </div>
         <div className="mx-auto max-w-md">
-          <h1 className="mb-8 text-center text-3xl font-bold text-foreground">Study Roadmap</h1>
+          <h1 className="mb-8 text-center text-3xl font-bold text-foreground">
+            Learn Deeper
+          </h1>
           <div className="rounded-lg bg-card p-6 shadow-md">
-            <h2 className="mb-6 text-xl font-semibold text-card-foreground">Starting Page / Login</h2>
+            <h2 className="mb-6 text-xl font-semibold text-card-foreground">
+              Login
+            </h2>
             <LoginForm />
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }
-

@@ -156,7 +156,7 @@ export default function Topics() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8 flex items-center justify-between">
-          <h1 className="subtle-gradient-text">Your Learning Journey</h1>
+          <h1 className="subtle-gradient-text">Intellectra</h1>
           <ThemeToggle />
         </div>
 
